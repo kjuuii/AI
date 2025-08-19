@@ -8,6 +8,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+import font_utils
+
+
 import os
 import json
 import hashlib
@@ -24,20 +27,20 @@ import base64
 import time # Keep for spinners
 import traceback # For detailed error logging
 import matplotlib.pyplot as plt
-from font_utils import setup_chinese_font
-
-# --- 新增：从 font_utils 导入字体设置 ---
-try:
-    from font_utils import FONT_PROP, apply_plot_style # 导入 apply_plot_style (如果也移过去了)
-    print("Font utils loaded successfully from font_utils.py")
-except ImportError as e:
-    print(f"错误：无法加载 font_utils.py: {e}")
-    # 定义一个备用的 FONT_PROP 和 apply_plot_style
-    FONT_PROP = None
-    def apply_plot_style(ax): return ax # 占位函数
-# --- 结束新增 ---
-
-setup_chinese_font()
+# # from font_utils import setup_chinese_font
+#
+# # --- 新增：从 font_utils 导入字体设置 ---
+# try:
+#     from font_utils import FONT_PROP, apply_plot_style # 导入 apply_plot_style (如果也移过去了)
+#     print("Font utils loaded successfully from font_utils.py")
+# except ImportError as e:
+#     print(f"错误：无法加载 font_utils.py: {e}")
+#     # 定义一个备用的 FONT_PROP 和 apply_plot_style
+#     FONT_PROP = None
+#     def apply_plot_style(ax): return ax # 占位函数
+# # --- 结束新增 ---
+#
+# setup_chinese_font()
 
 # --- 移除 app.py 中的字体设置函数和调用 ---
 # def setup_better_chinese_font(): ...

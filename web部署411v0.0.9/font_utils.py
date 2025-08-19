@@ -1,6 +1,7 @@
-# font_utils.py - 优化解决方案
+# font_utils.py - 全局字体补丁最终版
 import os
 import streamlit as st
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 from matplotlib.font_manager import FontProperties
@@ -9,139 +10,80 @@ import logging
 # 配置日志记录
 logging.basicConfig(level=logging.INFO)
 
+# --- 核心代码：定义一个全局变量来存储字体属性 ---
+CHINESE_FONT_PROP = None
+
 
 @st.cache_resource
 def setup_chinese_font():
     """
-    从项目内部加载字体，并将其注册到 matplotlib 的字体管理器中。
-    这是最彻底的解决方案，可以处理代码中各种字体名称的请求。
+    在程序启动时运行，为 Matplotlib 设置一个全局的、可用的中文字体。
+    这是解决所有后续绘图模块字体问题的关键。
     """
-    logging.info("开始从项目路径设置中文字体...")
+    global CHINESE_FONT_PROP
+    # 如果已经设置过，就直接返回
+    if CHINESE_FONT_PROP is not None:
+        return True
+
+    logging.info("--- 开始执行全局中文字体设置 ---")
 
     try:
-        # 构建字体文件的完整路径
-        project_root = os.getcwd()
-        # 路径调整为相对于项目根目录
-        font_file_name = "fonts/NotoSansSC-VariableFont_wght.ttf"
-        local_font_path = os.path.join(project_root, font_file_name)
+        # 寻找服务器上可用的 Noto Sans CJK 字体
+        # Streamlit Cloud 通过 packages.txt 安装后，字体通常在这个路径
+        font_path = ""
+        possible_paths = [
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"
+        ]
 
-        # 兼容旧的路径结构
-        if not os.path.exists(local_font_path):
-            app_subdirectory = "web部署411v0.0.9"
-            local_font_path = os.path.join(project_root, app_subdirectory, "fonts", "NotoSansSC-VariableFont_wght.ttf")
+        for path in possible_paths:
+            if os.path.exists(path):
+                font_path = path
+                break
 
-        if os.path.exists(local_font_path):
-            logging.info(f"在项目路径中找到字体文件: {local_font_path}")
+        # 如果在标准路径找不到，则尝试从项目内部寻找
+        if not font_path:
+            project_font_path = "fonts/NotoSansSC-VariableFont_wght.ttf"
+            if os.path.exists(project_font_path):
+                font_path = project_font_path
 
-            # 将字体文件添加到 matplotlib 的字体管理器
-            try:
-                fm.fontManager.addfont(local_font_path)
-                logging.info("字体已成功添加到 matplotlib 字体管理器")
-            except Exception as e:
-                logging.warning(f"无法添加字体到字体管理器: {e}")
+        if font_path:
+            logging.info(f"成功找到可用的中文字体文件: {font_path}")
 
-            # 获取字体的实际名称
-            font_prop = FontProperties(fname=local_font_path)
-            actual_font_name = font_prop.get_name()
-            logging.info(f"字体实际名称: {actual_font_name}")
+            # --- 最关键的步骤：设置全局字体 ---
+            # 1. 将字体添加到 Matplotlib 的管理器中
+            fm.fontManager.addfont(font_path)
 
-            # --- 优化核心 ---
-            # 将找到的字体名插入到 sans-serif 列表的最前面，而不是替换整个列表
-            # 这样可以避免因硬编码的字体名不存在而产生的警告
-            plt.rcParams['font.sans-serif'].insert(0, actual_font_name)
+            # 2. 创建字体属性对象
+            CHINESE_FONT_PROP = FontProperties(fname=font_path)
 
-            # 确保字体家族设置为sans-serif
-            plt.rcParams['font.family'] = 'sans-serif'
+            # 3. 强力设置 Matplotlib 的全局默认字体
+            # 这会让所有不特别指定字体的绘图操作都使用这款字体
+            plt.rcParams['font.family'] = CHINESE_FONT_PROP.get_name()
+            plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
-            # 解决负号显示问题
-            plt.rcParams['axes.unicode_minus'] = False
-
-            # 保存字体信息到 session_state
-            st.session_state['font_prop'] = font_prop
-            st.session_state['chinese_font_path'] = local_font_path
-            st.session_state['font_name'] = actual_font_name
-
-            logging.info(f"字体设置完成！当前 font.sans-serif 列表最优先字体: {plt.rcParams['font.sans-serif'][0]}")
+            logging.info(f"Matplotlib 全局字体已设置为: {CHINESE_FONT_PROP.get_name()}")
+            logging.info("--- 全局中文字体设置完成 ---")
             return True
-
         else:
-            logging.error(f"字体文件不存在: {local_font_path}")
-            st.error(f"部署环境中未找到指定的字体文件。请确保 'fonts/NotoSansSC-VariableFont_wght.ttf' 文件存在。")
+            logging.error("在服务器上未能找到任何可用的中文字体文件！")
+            st.error("部署错误：服务器缺少中文字体文件，请检查`packages.txt`和字体文件路径。")
             return False
 
     except Exception as e:
-        logging.error(f"设置字体时发生严重错误: {e}", exc_info=True)
-        st.error(f"设置中文字体时出错: {e}")
+        logging.error(f"设置全局字体时发生严重错误: {e}", exc_info=True)
+        st.error(f"初始化中文字体环境时出错: {e}")
         return False
 
 
-def get_chinese_font_prop():
+def get_font_prop():
     """
-    获取中文字体属性对象，确保字体已经设置
+    提供一个统一的接口，让其他模块可以获取到已经配置好的字体属性。
     """
-    if 'font_prop' not in st.session_state:
+    if CHINESE_FONT_PROP is None:
         setup_chinese_font()
-
-    return st.session_state.get('font_prop', FontProperties())
-
-
-def apply_chinese_to_axes(ax):
-    """
-    将中文字体应用到特定的 axes 对象
-    """
-    font_prop = get_chinese_font_prop()
-    for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
-                 ax.get_xticklabels() + ax.get_yticklabels()):
-        if item:
-            item.set_fontproperties(font_prop)
-    legend = ax.get_legend()
-    if legend:
-        for text in legend.get_texts():
-            text.set_fontproperties(font_prop)
-    return ax
+    return CHINESE_FONT_PROP
 
 
-# --- 其他辅助函数保持不变 ---
-def create_chinese_figure(figsize=(10, 6)):
-    setup_chinese_font()
-    return plt.figure(figsize=figsize)
-
-
-def chinese_text(ax, x, y, text, **kwargs):
-    return ax.text(x, y, text, fontproperties=get_chinese_font_prop(), **kwargs)
-
-
-def chinese_title(ax, title, **kwargs):
-    return ax.set_title(title, fontproperties=get_chinese_font_prop(), **kwargs)
-
-
-def chinese_xlabel(ax, label, **kwargs):
-    return ax.set_xlabel(label, fontproperties=get_chinese_font_prop(), **kwargs)
-
-
-def chinese_ylabel(ax, label, **kwargs):
-    return ax.set_ylabel(label, fontproperties=get_chinese_font_prop(), **kwargs)
-
-
-def chinese_legend(ax, labels=None, **kwargs):
-    font_prop = get_chinese_font_prop()
-    if labels:
-        return ax.legend(labels, prop=font_prop, **kwargs)
-    return ax.legend(prop=font_prop, **kwargs)
-
-
-def set_chinese_labels(ax, title=None, xlabel=None, ylabel=None):
-    if title: chinese_title(ax, title)
-    if xlabel: chinese_xlabel(ax, xlabel)
-    if ylabel: chinese_ylabel(ax, ylabel)
-    return ax
-
-
-# 兼容旧代码的别名
-def setup_better_chinese_font():
-    return setup_chinese_font()
-
-
-# 在模块加载时自动初始化
-if __name__ != "__main__":
-    setup_chinese_font()
+# --- 在模块被导入时，就立即执行字体设置 ---
+setup_chinese_font()
